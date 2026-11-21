@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Minute de lecture</title>
+<!-- Bibliothèque officielle de Telegram pour les mini-applications -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #14181f);
+    --hint: var(--tg-theme-hint-color, #6b7280);
+    --card: var(--tg-theme-secondary-bg-color, #eef1f5);
+    --btn: var(--tg-theme-button-color, #2481cc);
+    --btn-text: var(--tg-theme-button-text-color, #ffffff);
+    --ok: #15803d; --mid: #fbbf24; --ko: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px; line-height: 1.4; -webkit-tap-highlight-color: transparent;
+    padding: 16px 16px 96px; max-width: 520px; margin: 0 auto;
+  }
+  body.in-tg { padding-bottom: 24px; }
+  h1 { font-size: 22px; margin: 4px 0 2px; }
+  h2 { font-size: 18px; margin: 18px 0 8px; }
+  .sub { color: var(--hint); margin: 0 0 14px; font-size: 14px; }
+  button { font: inherit; cursor: pointer; }
+  .tile {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    background: var(--card); color: var(--text); border: none; border-radius: 14px;
+    padding: 14px; margin-bottom: 10px;
+  }
+  .tile .n { width: 34px; height: 34px; border-radius: 50%; background: var(--btn); color: var(--btn-text);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; flex: none; }
+  .tile.done .n { background: var(--ok); color: #fff; }
+  .tile .t { font-weight: 700; }
+  .tile .d { color: var(--hint); font-size: 14px; }
+  .ghost { background: var(--card); color: var(--text); border: none; border-radius: 12px; padding: 12px 14px; width: 100%; margin-top: 10px; }
+  .ghost.warn { color: #c62828; }
+  .link { background: none; border: none; color: var(--btn); padding: 10px 0; font-weight: 600; }
+  #main {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px;
+    width: calc(100% - 32px); max-width: 488px; background: var(--btn); color: var(--btn-text);
+    border: none; border-radius: 14px; padding: 15px; font-weight: 700; font-size: 17px;
+  }
+  .box { background: var(--card); border-radius: 14px; padding: 14px; margin-top: 12px; }
+  .lab { color: var(--hint); font-size: 13px; }
+  .big { font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { background: var(--card); border-radius: 99px; padding: 5px 11px; font-size: 15px; }
+  .box .chip { background: var(--bg); }
+  .note { color: var(--hint); font-size: 13px; margin-top: 14px; }
+
+  /* Lecture : ce que l'enfant lit */
+  .flash {
+    min-height: 34vh; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; text-align: center; line-height: 1.1; user-select: none; -webkit-user-select: none;
+    word-break: keep-all;
+  }
+  .mu { opacity: .35; }       /* lettre muette, en gris comme sur les fiches */
+  .bar { height: 10px; background: var(--card); border-radius: 99px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 100%; background: var(--btn); transform-origin: left; }
+  .clock { display: flex; justify-content: space-between; color: var(--hint); font-size: 14px; margin: 8px 0; font-variant-numeric: tabular-nums; }
+  .answers { display: grid; gap: 10px; }
+  .answers.three { grid-template-columns: 1fr 1fr 1fr; }
+  .answers.two { grid-template-columns: 1fr 1fr; }
+  .answers button { border: none; border-radius: 16px; padding: 22px 6px; font-weight: 700; font-size: 16px; touch-action: manipulation; }
+  .answers button:active { filter: brightness(.9); }
+  .b-ok { background: var(--ok); color: #fff; }
+  .b-mid { background: var(--mid); color: #1f2937; }
+  .b-ko { background: var(--ko); color: #fff; }
+  .answers .small { grid-column: 1 / -1; padding: 10px; font-size: 14px; font-weight: 500; background: var(--card); color: var(--text); }
+
+  /* Boîte à mots */
+  .carton { display: flex; justify-content: space-between; align-items: center; background: var(--card); border-radius: 12px; padding: 10px 14px; margin-bottom: 6px; font-size: 20px; }
+  .traits { font-size: 15px; letter-spacing: 3px; color: var(--ok); }
+  .traits .off { color: var(--hint); opacity: .5; }
+  .add { display: flex; gap: 8px; margin-top: 10px; }
+  .add input { flex: 1; font: inherit; font-size: 18px; color: var(--text); background: var(--card); border: 1px solid transparent; border-radius: 12px; padding: 12px; }
+  .add input:focus { outline: 2px solid var(--btn); }
+  .add button { border: none; border-radius: 12px; padding: 0 16px; background: var(--btn); color: var(--btn-text); font-weight: 700; }
+
+  /* Bilan */
+  .chart { display: flex; align-items: flex-end; gap: 6px; height: 120px; margin-top: 10px; }
+  .chart .col { flex: 1; max-width: 48px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; font-size: 12px; color: var(--hint); }
+  .chart .col b { display: block; width: 100%; background: var(--btn); border-radius: 6px 6px 0 0; }
+  .chart .col span { color: var(--text); font-weight: 700; font-size: 13px; }
+  .day { background: var(--card); border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; font-size: 15px; }
+  .day small { display: block; color: var(--hint); }
+  select { font: inherit; color: var(--text); background: var(--card); border: none; border-radius: 12px; padding: 12px; width: 100%; }
+
+  #toast {
+    position: fixed; left: 50%; top: 14px; transform: translateX(-50%); width: calc(100% - 32px); max-width: 488px;
+    background: #14181f; color: #fff; border-radius: 12px; padding: 12px 14px; font-size: 15px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.25); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 5;
+  }
+  #toast.on { opacity: 1; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<button id="back" class="link" hidden>Retour</button>
+
+<!-- Accueil -->
+<section id="home" hidden>
+  <h1>Minute de lecture</h1>
+  <p class="sub" id="h-where"></p>
+  <button class="tile" id="t-minute"><span class="n">1</span><span><span class="t">La minute</span><br><span class="d" id="d-minute"></span></span></button>
+  <button class="tile" id="t-boite"><span class="n">2</span><span><span class="t">La boîte à mots</span><br><span class="d" id="d-boite"></span></span></button>
+  <button class="tile" id="t-finir"><span class="n">3</span><span><span class="t">Pour finir : 10 mots neufs</span><br><span class="d" id="d-finir"></span></span></button>
+  <button class="tile" id="t-bilan"><span class="n">&#9776;</span><span><span class="t">Le bilan</span><br><span class="d">Progrès, et envoi au robot Jarvis</span></span></button>
+  <p class="note">Le glissé, l'escalier, la phrase et la dictée restent sur la feuille de la séance.</p>
+  <button class="link" id="to-reglages">Changer de séance</button>
+  <p class="note" id="preview-note" hidden>Aperçu hors de Telegram : le bouton du bas et les vibrations remplacent ceux de Telegram.</p>
+</section>
+
+<!-- La minute -->
+<section id="minute" hidden>
+  <div id="m-intro">
+    <h1>La minute</h1>
+    <p class="sub">Elle lit la syllabe qui s'affiche. Toi, tu touches tout de suite :</p>
+    <div class="box">
+      <b style="color:var(--ok)">D'un coup</b> : lue sans s'arrêter entre les lettres.<br>
+      <b style="color:#b45309">Lettre par lettre</b> : juste, mais lentement.<br>
+      <b style="color:var(--ko)">Raté</b> : fausse ou devinée.
+    </div>
+    <p class="note">On ne l'arrête pas pendant la minute. Les syllabes ratées se relisent avec elle après. Les 30 syllabes sont celles de la feuille, dans un ordre qui change à chaque fois.</p>
+  </div>
+  <div id="m-run" hidden>
+    <div class="bar"><i id="m-bar"></i></div>
+    <div class="clock"><span id="m-sec">60 s</span><span id="m-count">0 juste</span></div>
+    <div class="flash" id="m-flash"></div>
+    <div class="answers three">
+      <button class="b-ok" data-k="coup">D'un coup</button>
+      <button class="b-mid" data-k="lent">Lettre par lettre</button>
+      <button class="b-ko" data-k="rate">Raté</button>
+    </div>
+  </div>
+  <div id="m-end" hidden>
+    <h1>Fin de la minute</h1>
+    <div class="box"><div class="lab">Syllabes justes</div><div class="big" id="m-justes"></div><div id="m-record"></div></div>
+    <div class="box"><div class="lab">D'un coup ?</div><div class="big" id="m-coup" style="font-size:28px"></div><div class="lab" id="m-coup-d"></div></div>
+    <div class="box" id="m-rates-box"><div class="lab">À relire avec elle</div><div class="chips" id="m-rates"></div></div>
+  </div>
+</section>
+
+<!-- La boîte à mots -->
+<section id="boite" hidden>
+  <h1>La boîte à mots</h1>
+  <p class="sub">Un mot raté va dans la boîte. Chaque jour, elle relit toute la boîte : lu juste, un trait ; raté, on efface ses traits. Trois traits (trois jours justes de suite) : le mot est gagné.</p>
+  <div id="b-list"></div>
+  <div class="add"><input type="text" id="b-new" placeholder="Ajouter un mot raté" autocomplete="off" autocapitalize="off"><button id="b-add">Ajouter</button></div>
+  <h2 id="b-won-t" hidden>Mots gagnés</h2>
+  <div class="chips" id="b-won"></div>
+</section>
+
+<!-- Revue de la boîte, puis « Pour finir » : un mot à la fois -->
+<section id="flashcards" hidden>
+  <p class="sub" id="f-title"></p>
+  <div class="clock"><span id="f-pos"></span><span id="f-score"></span></div>
+  <div class="flash" id="f-flash"></div>
+  <div class="answers two">
+    <button class="b-ok" id="f-ok">Juste</button>
+    <button class="b-ko" id="f-ko">Raté</button>
+    <button class="small" id="f-undo">Annuler le dernier</button>
+  </div>
+  <p class="note" id="f-note"></p>
+</section>
+
+<!-- Résultat de « Pour finir » -->
+<section id="finir-end" hidden>
+  <h1>Pour finir</h1>
+  <div class="box"><div class="lab" id="fe-lab"></div><div class="big" id="fe-score"></div></div>
+  <div class="box"><div class="lab">Demain</div><div id="fe-verdict" style="font-size:18px;font-weight:600"></div></div>
+  <div class="box" id="fe-rates-box"><div class="lab">Mis dans la boîte à mots</div><div class="chips" id="fe-rates"></div></div>
+</section>
+
+<!-- Le bilan -->
+<section id="bilan" hidden>
+  <h1>Le bilan</h1>
+  <p class="sub" id="bi-where"></p>
+  <div class="box"><div class="lab">La minute, syllabes justes (10 dernières)</div><div class="chart" id="bi-chart"></div></div>
+  <h2>Jour par jour</h2>
+  <div id="bi-days"></div>
+  <button class="ghost" id="bi-share" hidden>Envoyer au robot Jarvis</button>
+  <button class="ghost" id="bi-copy">Copier le bilan</button>
+  <p class="note">« Envoyer » ouvre le choix de discussion de Telegram : choisis Jarvis. Le bilan remplace la photo de la grille du samedi.</p>
+</section>
+
+<!-- Réglages -->
+<section id="reglages" hidden>
+  <h1>Où en est-elle ?</h1>
+  <p class="sub">À régler au premier usage, ou pour corriger. Ensuite, l'application avance seule avec la règle du 8 sur 10.</p>
+  <label class="lab" for="r-seance">Séance</label>
+  <select id="r-seance"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select>
+  <p class="lab" style="margin-top:12px">Liste de « Pour finir »</p>
+  <select id="r-liste"><option value="A">Liste A (première fois)</option><option value="B">Liste B (séance refaite)</option></select>
+  <button class="ghost warn" id="r-clear">Tout effacer</button>
+</section>
+
+<button id="main" hidden></button>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+// ---------- Contenu de la semaine (à changer chaque semaine, mot pour mot depuis la fiche) ----------
+// Notation des fiches : syllabes séparées par « - », lettre muette entre crochets.
+const SEMAINE = {
+  titre: 'Semaine 1 bis',
+  minute: 'la mi ro fu sé pa to bi du né vo ga ri lu ma pé so ju fa ni co tu ré mo di sa lé vi po bu'.split(' '),
+  finir: {
+    1: { A: ['pa-pi','do-do','lo-to','vo-lé','ra-té','pa-vé','ri-r[e]','li-r[e]','ta-pé','bo-bo'],
+         B: ['do-ré','pu-ré[e]','fi-lé','di-r[e]','ra-t[e]','da-t[e]','tu-tu','ka-ki','ma-ri','bu-té'] },
+    2: { A: ['ca-ra-f[e]','ré-pa-ré','a-va-lé','pé-ta-l[e]','co-lo-ré','dé-mo-li','vé-ri-té','ga-lo-pé','li-bé-ré','pa-ro-di[e]'],
+         B: ['ma-la-di[e]','do-ra-d[e]','mo-bi-l[e]','fi-gu-r[e]','ra-bo-té','re-ti-ré','dé-fi-lé','ré-ga-lé','ma-ri-é','sa-fa-ri'] },
+    3: { A: ['lac','vol','mal','roc','sur','tor-du','ar-mé','cal-mé','bor-dé','fil-mé'],
+         B: ['bac','bal','pic','tir','or','mor-du','por-té','for-mé','dor-mi','sor-ti'] },
+    4: { A: ['bo-cal','ra-vir','mé-tal','po-lir','ca-far[d]','ca-pi-tal','sa-lir','mo-ral','ri-val','pé-tar[d]'],
+         B: ['ré-gal','nor-mal','ma-jor','té-nor','Mé-dor','a-bo-lir','Da-kar','ba-zar','fa-tal','mu-ral'] },
+    5: { A: ['ri[z]','mo[t]','re-po[s]','ca-po[t]','mu-lo[t]','re-gar[d]','par-ti[e]','cal-m[e]','for-mu-l[e]','co-li[s]'],
+         B: ['a-vi[s]','re-fu[s]','mar-mi-t[e]','bor-du-r[e]','ri-go-l[e]','ta-lu[s]','pi-vo[t]','ga-lo[p]','a-bu[s]','ta-ba[c]'] },
+    6: { A: ['Di-vo','sa-li-v[e]','ar-mu-r[e]','bo-li-d[e]','dé-li-ca[t]','car-go','ko-a-la','ra-pi-di-té','ca-ca-o','ca-ri-ca-tu-r[e]'],
+         B: ['par-ka','ko-ra','pa-vo[t]','co-la','zé-bu','ra-vi-o-li','tu-ba','po-lar','co-lo-ri-é','pi-ca-dor'] }
+  }
+};
+
+// ---------- Règles (fonctions pures, vérifiées par le banc) ----------
+// D'un coup ? oui : presque toutes ; un peu : une partie ; non : la plupart lettre par lettre
+function verdictCoup(coup, justes) {
+  if (justes === 0) return 'non';
+  const r = coup / justes;
+  return r >= 0.8 ? 'oui' : r >= 0.4 ? 'un peu' : 'non';
+}
+// La règle du 8 sur 10
+function regle(seance, liste, score) {
+  if (score >= 8) {
+    if (seance < 6) return { seance: seance + 1, liste: 'A', fini: false, msg: `Séance ${seance + 1}, liste A.` };
+    return { seance, liste, fini: true, msg: 'La semaine est finie. Envoie le bilan au robot Jarvis pour préparer la semaine 2.' };
+  }
+  if (liste === 'A') return { seance, liste: 'B', fini: false, msg: `La même séance ${seance}, avec la liste B. C'est normal, ce n'est pas un échec.` };
+  return { seance, liste: 'B', fini: false, msg: 'Moins de 8 avec la liste B : envoie le bilan au robot Jarvis avant de continuer.' };
+}
+// La boîte : un trait par jour juste (pas le jour où le mot entre), raté efface les traits, 3 traits = gagné
+function relire(carton, juste, jour) {
+  const c = { ...carton, vu: jour };
+  if (!juste) c.traits = 0;
+  else if (carton.ajout !== jour && carton.vu !== jour) c.traits = (carton.traits || 0) + 1;
+  c.gagne = c.traits >= 3;
+  return c;
+}
+const plain = w => w.replace(/[-\[\]]/g, '');
+
+// ---------- Telegram ----------
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTg = !!(tg && tg.initData);
+const can = v => inTg && tg.isVersionAtLeast(v);
+if (tg) tg.ready();
+if (inTg) tg.expand();
+if (can('7.7')) tg.disableVerticalSwipes();
+document.body.classList.toggle('in-tg', inTg);
+const $ = s => document.querySelector(s);
+$('#preview-note').hidden = inTg;
+
+function haptic(kind) {
+  if (can('6.1')) {
+    if (kind === 'tap') tg.HapticFeedback.impactOccurred('light');
+    else tg.HapticFeedback.notificationOccurred(kind === 'ko' ? 'warning' : 'success');
+  } else if (navigator.vibrate) navigator.vibrate(kind === 'tap' ? 12 : [30, 40, 30]);
+}
+let mainFn = null;
+function setMain(text, fn) {
+  mainFn = fn;
+  if (inTg) { $('#main').hidden = true; if (text) { tg.MainButton.setText(text); tg.MainButton.show(); } else tg.MainButton.hide(); }
+  else { $('#main').hidden = !text; $('#main').textContent = text || ''; }
+}
+if (inTg) tg.MainButton.onClick(() => mainFn && mainFn());
+$('#main').onclick = () => mainFn && mainFn();
+let backFn = null;
+function setBack(fn) {
+  backFn = fn;
+  if (can('6.1')) { fn ? tg.BackButton.show() : tg.BackButton.hide(); $('#back').hidden = true; }
+  else $('#back').hidden = !fn;
+}
+if (can('6.1')) tg.BackButton.onClick(() => backFn && backFn());
+$('#back').onclick = () => backFn && backFn();
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 2800);
+}
+function twoTaps(btn, label, action) {
+  let armed = false, timer = null; btn.textContent = label;
+  btn.onclick = () => {
+    if (!armed) { armed = true; btn.textContent = 'Touche encore pour confirmer'; timer = setTimeout(() => { armed = false; btn.textContent = label; }, 3000); return; }
+    clearTimeout(timer); armed = false; btn.textContent = label; action();
+  };
+}
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const wordHTML = w => esc(w).replace(/-/g, '').replace(/\[([^\]]*)\]/g, '<span class="mu">$1</span>');
+function showWord(el, w) {
+  const n = Math.max(plain(w).length, 2);
+  el.style.fontSize = `min(${Math.min(85 / (0.6 * n), 30).toFixed(1)}vw, 150px)`;
+  el.innerHTML = wordHTML(w);
+}
+function jour(d = new Date()) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+const jj = k => k.slice(8, 10) + '/' + k.slice(5, 7);
+
+// ---------- Données, gardées dans le téléphone seulement ----------
+const KEY = 'minute-lecture-v1';
+const vide = () => ({ regle: false, seance: 1, liste: 'A', fini: false, minutes: [], controles: [], boite: [], gagnes: [] });
+function load() { try { return Object.assign(vide(), JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) { return vide(); } }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+let S = load();
+
+function ajouterBoite(w) {
+  const p = plain(w).toLowerCase();
+  if (!p) return false;
+  if (S.boite.some(c => plain(c.mot).toLowerCase() === p)) return false;
+  S.boite.push({ mot: w, traits: 0, ajout: jour(), vu: null });
+  return true;
+}
+
+// ---------- Écrans ----------
+function show(id) {
+  document.querySelectorAll('section').forEach(el => { el.hidden = el.id !== id; });
+  window.scrollTo(0, 0);
+  if (inTg && can('6.2')) { id === 'minute' || id === 'flashcards' ? tg.enableClosingConfirmation() : tg.disableClosingConfirmation(); }
+}
+const home = () => { renderHome(); show('home'); setMain(null); setBack(null); };
+
+function renderHome() {
+  const t = jour();
+  $('#h-where').textContent = S.fini
+    ? `${SEMAINE.titre} finie. Envoie le bilan au robot Jarvis.`
+    : `${SEMAINE.titre}, séance ${S.seance}, liste ${S.liste}`;
+  const mJour = S.minutes.filter(m => m.d === t);
+  const rec = S.minutes.reduce((a, m) => Math.max(a, m.n), 0);
+  $('#d-minute').textContent = (mJour.length ? `Faite aujourd'hui : ${mJour[mJour.length - 1].n} justes. ` : '') + (rec ? `Record : ${rec}` : '30 syllabes, 1 minute au chronomètre');
+  $('#t-minute').classList.toggle('done', mJour.length > 0);
+  const aRevoir = S.boite.filter(c => c.vu !== t).length;
+  $('#d-boite').textContent = S.boite.length === 0 ? 'Vide pour l\'instant' : `${S.boite.length} mot(s), ${aRevoir} à relire aujourd'hui`;
+  $('#t-boite').classList.toggle('done', S.boite.length > 0 && aRevoir === 0);
+  const cJour = S.controles.filter(c => c.d === t);
+  $('#d-finir').textContent = cJour.length ? `Fait aujourd'hui : ${cJour[cJour.length - 1].score}/10` : (S.fini ? 'Semaine finie' : `Séance ${S.seance}, liste ${S.liste}, seule et sans aide`);
+  $('#t-finir').classList.toggle('done', cJour.length > 0);
+}
+$('#t-minute').onclick = () => minuteIntro();
+$('#t-boite').onclick = () => boite();
+$('#t-finir').onclick = () => { if (S.fini) { toast('La semaine est finie : envoie le bilan au robot Jarvis.'); return; } finirStart(); };
+$('#t-bilan').onclick = () => bilan();
+$('#to-reglages').onclick = () => reglages();
+
+// ----- La minute -----
+let run = null;
+function shuffle(a) { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; }
+function minuteIntro() {
+  show('minute'); $('#m-intro').hidden = false; $('#m-run').hidden = true; $('#m-end').hidden = true;
+  setMain('Démarrer la minute', minuteStart); setBack(home);
+}
+function minuteStart() {
+  run = { file: shuffle(SEMAINE.minute), i: 0, taps: [], t0: Date.now(), fini: false };
+  $('#m-intro').hidden = true; $('#m-run').hidden = false;
+  setMain(null); setBack(null);
+  showWord($('#m-flash'), run.file[0]);
+  $('#m-count').textContent = '0 juste';
+  run.timer = setInterval(tick, 100);
+  tick();
+}
+function tick() {
+  const left = Math.max(0, 60 - (Date.now() - run.t0) / 1000);
+  $('#m-bar').style.transform = `scaleX(${left / 60})`;
+  $('#m-sec').textContent = Math.ceil(left) + ' s';
+  if (left <= 0) minuteEnd();
+}
+document.querySelectorAll('#m-run [data-k]').forEach(b => b.onclick = () => {
+  if (!run || run.fini) return;
+  run.taps.push({ s: run.file[run.i], k: b.dataset.k });
+  haptic('tap');
+  run.i++;
+  if (run.i >= run.file.length) {                      // elle a tout lu : on repart, sans redonner la même syllabe
+    const last = run.file[run.file.length - 1];
+    let f = shuffle(SEMAINE.minute); if (f[0] === last) f.push(f.shift());
+    run.file = f; run.i = 0;
+  }
+  const n = run.taps.filter(t => t.k !== 'rate').length;
+  $('#m-count').textContent = n + (n > 1 ? ' justes' : ' juste');
+  showWord($('#m-flash'), run.file[run.i]);
+});
+function minuteEnd() {
+  if (run.fini) return;
+  run.fini = true; clearInterval(run.timer); haptic('fin');
+  const coup = run.taps.filter(t => t.k === 'coup').length;
+  const lent = run.taps.filter(t => t.k === 'lent').length;
+  const rates = [...new Set(run.taps.filter(t => t.k === 'rate').map(t => t.s))];
+  const ancien = S.minutes.reduce((a, m) => Math.max(a, m.n), 0);
+  const n = coup + lent;
+  S.minutes.push({ d: jour(), seance: S.seance, n, coup, lent, rates });
+  save();
+  $('#m-run').hidden = true; $('#m-end').hidden = false;
+  $('#m-justes').textContent = n;
+  $('#m-record').textContent = S.minutes.length === 1 ? 'Première minute : c\'est son record à battre.' : (n > ancien ? `Nouveau record ! (avant : ${ancien})` : `Record : ${ancien}`);
+  const v = verdictCoup(coup, n);
+  $('#m-coup').textContent = v === 'un peu' ? 'Un peu' : v === 'oui' ? 'Oui' : 'Non';
+  $('#m-coup-d').textContent = `${coup} d'un coup, ${lent} lettre par lettre`;
+  $('#m-rates-box').hidden = rates.length === 0;
+  $('#m-rates').innerHTML = rates.map(s => `<span class="chip">${esc(s)}</span>`).join('');
+  setMain('Retour à l\'accueil', home); setBack(home);
+}
+
+// ----- Fiches une à une : revue de la boîte ou « Pour finir » -----
+let fc = null;
+function flashcards(cfg) {
+  fc = Object.assign({ i: 0, res: [] }, cfg);
+  show('flashcards'); setMain(null); setBack(cfg.back);
+  $('#f-title').textContent = cfg.titre; $('#f-note').textContent = cfg.note || '';
+  fcRender();
+}
+function fcRender() {
+  $('#f-pos').textContent = `Mot ${fc.i + 1} sur ${fc.mots.length}`;
+  const ok = fc.res.filter(Boolean).length;
+  $('#f-score').textContent = `${ok} juste${ok > 1 ? 's' : ''}`;
+  showWord($('#f-flash'), fc.mots[fc.i]);
+  $('#f-undo').disabled = fc.i === 0;
+}
+function fcAnswer(juste) {
+  fc.res.push(juste); haptic('tap');
+  if (fc.i + 1 >= fc.mots.length) { const r = fc.res; const f = fc.fin; fc = null; f(r); return; }
+  fc.i++; fcRender();
+}
+$('#f-ok').onclick = () => fc && fcAnswer(true);
+$('#f-ko').onclick = () => fc && fcAnswer(false);
+$('#f-undo').onclick = () => { if (fc && fc.i > 0) { fc.i--; fc.res.pop(); fcRender(); } };
+
+// ----- La boîte à mots -----
+function boite() {
+  const t = jour();
+  $('#b-list').innerHTML = S.boite.length === 0 ? '<p class="sub">Vide. Un mot raté pendant la séance s\'ajoute ici ; les mots ratés de « Pour finir » y vont tout seuls.</p>' :
+    S.boite.map(c => {
+      const tr = [0, 1, 2].map(i => i < c.traits ? '&#9679;' : '<span class="off">&#9675;</span>').join('');
+      return `<div class="carton"><span>${wordHTML(c.mot)}</span><span class="traits" title="${c.traits} trait(s)">${tr}</span></div>`;
+    }).join('');
+  $('#b-won-t').hidden = S.gagnes.length === 0;
+  $('#b-won').innerHTML = S.gagnes.map(g => `<span class="chip">${wordHTML(g.mot)}</span>`).join('');
+  show('boite'); setBack(home);
+  const aRevoir = S.boite.filter(c => c.vu !== t);
+  setMain(aRevoir.length ? `Relire la boîte (${aRevoir.length})` : null, aRevoir.length ? revue : null);
+}
+$('#b-add').onclick = () => {
+  const v = $('#b-new').value.trim();
+  if (!v) return;
+  if (ajouterBoite(v)) { save(); $('#b-new').value = ''; toast(`« ${plain(v)} » est dans la boîte.`); boite(); }
+  else toast('Ce mot est déjà dans la boîte.');
+};
+$('#b-new').addEventListener('keydown', e => { if (e.key === 'Enter') $('#b-add').click(); });
+function revue() {
+  const t = jour();
+  const cartons = S.boite.filter(c => c.vu !== t);
+  flashcards({
+    titre: 'La boîte à mots', mots: cartons.map(c => c.mot), back: boite,
+    note: 'Ne jamais dire le mot à sa place : on le redécouvre syllabe par syllabe, puis elle le relit deux fois.',
+    fin: res => {
+      const gagnes = [];
+      cartons.forEach((c, i) => {
+        const k = S.boite.indexOf(c);
+        const n = relire(c, res[i], t);
+        if (n.gagne) { S.boite.splice(k, 1); S.gagnes.push({ mot: c.mot, d: t }); gagnes.push(plain(c.mot)); }
+        else S.boite[k] = n;
+      });
+      save(); haptic('fin');
+      toast(gagnes.length ? `Mot(s) gagné(s) : ${gagnes.join(', ')} !` : 'Boîte relue.');
+      boite();
+    }
+  });
+}
+
+// ----- Pour finir -----
+function finirStart() {
+  const mots = SEMAINE.finir[S.seance][S.liste];
+  show('flashcards');
+  flashcards({
+    titre: `Pour finir : séance ${S.seance}, liste ${S.liste}`, mots, back: home,
+    note: 'Elle lit seule, sans aide. Juste : dit correctement, même lentement, sans deviner. Une lettre grise oubliée ne compte pas comme faute.',
+    fin: res => finirEnd(mots, res)
+  });
+}
+function finirEnd(mots, res) {
+  const score = res.filter(Boolean).length;
+  const rates = mots.filter((m, i) => !res[i]);
+  const avant = { seance: S.seance, liste: S.liste };
+  const r = regle(S.seance, S.liste, score);
+  S.controles.push({ d: jour(), seance: avant.seance, liste: avant.liste, score, rates });
+  rates.forEach(ajouterBoite);
+  S.seance = r.seance; S.liste = r.liste; S.fini = r.fini;
+  save(); haptic(score >= 8 ? 'fin' : 'ko');
+  $('#fe-lab').textContent = `Séance ${avant.seance}, liste ${avant.liste}`;
+  $('#fe-score').textContent = `${score} / 10`;
+  $('#fe-verdict').textContent = r.msg;
+  $('#fe-rates-box').hidden = rates.length === 0;
+  $('#fe-rates').innerHTML = rates.map(m => `<span class="chip">${wordHTML(m)}</span>`).join('');
+  show('finir-end'); setMain('Retour à l\'accueil', home); setBack(home);
+}
+
+// ----- Le bilan -----
+function bilanTexte() {
+  const lignes = [`Lecture, ${SEMAINE.titre.toLowerCase()} : bilan du ${jj(jour())}`];
+  const jours = [...new Set([...S.minutes.map(m => m.d), ...S.controles.map(c => c.d)])].sort();
+  for (const d of jours) {
+    const parts = [];
+    S.minutes.filter(m => m.d === d).forEach(m => parts.push(`minute ${m.n} justes (${m.coup} d'un coup, ${m.lent} lettre par lettre : ${verdictCoup(m.coup, m.n)})` + (m.rates.length ? `, syllabes ratées : ${m.rates.join(' ')}` : '')));
+    S.controles.filter(c => c.d === d).forEach(c => parts.push(`pour finir séance ${c.seance} liste ${c.liste} : ${c.score}/10` + (c.rates.length ? `, ratés : ${c.rates.map(plain).join(', ')}` : '')));
+    lignes.push(`- ${jj(d)} : ${parts.join(' ; ')}`);
+  }
+  lignes.push(`Boîte : ${S.boite.length} mot(s)` + (S.boite.length ? ` (${S.boite.map(c => plain(c.mot) + ' ' + c.traits + '/3').join(', ')})` : '') + `. Gagnés : ${S.gagnes.length}` + (S.gagnes.length ? ` (${S.gagnes.map(g => plain(g.mot)).join(', ')})` : '') + '.');
+  lignes.push(S.fini ? 'Semaine finie : séance 6 réussie.' : `En cours : séance ${S.seance}, liste ${S.liste}.`);
+  return lignes.join('\n');
+}
+function bilan() {
+  $('#bi-where').textContent = S.fini ? `${SEMAINE.titre} finie` : `${SEMAINE.titre}, séance ${S.seance}, liste ${S.liste}`;
+  const last = S.minutes.slice(-10);
+  const max = Math.max(30, ...last.map(m => m.n));
+  $('#bi-chart').innerHTML = last.length === 0 ? '<p class="sub">Pas encore de minute.</p>' :
+    last.map(m => `<div class="col"><span>${m.n}</span><b style="height:${Math.max(4, Math.round(m.n / max * 90))}%"></b>${jj(m.d)}</div>`).join('');
+  const jours = [...new Set([...S.minutes.map(m => m.d), ...S.controles.map(c => c.d)])].sort().reverse();
+  $('#bi-days').innerHTML = jours.length === 0 ? '<p class="sub">Rien encore.</p>' : jours.map(d => {
+    const ms = S.minutes.filter(m => m.d === d).map(m => `Minute : ${m.n} justes, d'un coup : ${verdictCoup(m.coup, m.n)}`);
+    const cs = S.controles.filter(c => c.d === d).map(c => `Pour finir (séance ${c.seance}, ${c.liste}) : ${c.score}/10` + (c.rates.length ? `, ratés : ${c.rates.map(plain).join(', ')}` : ''));
+    return `<div class="day"><b>${jj(d)}</b><small>${esc([...ms, ...cs].join(' · '))}</small></div>`;
+  }).join('');
+  $('#bi-share').hidden = !inTg;
+  show('bilan'); setMain(null); setBack(home);
+}
+async function copier(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (e) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {} ta.remove(); return ok; }
+}
+$('#bi-copy').onclick = async () => toast((await copier(bilanTexte())) ? 'Bilan copié : colle-le dans la discussion avec Jarvis.' : 'Copie impossible sur ce téléphone.');
+$('#bi-share').onclick = () => tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(bilanTexte()));
+
+// ----- Réglages -----
+function reglages() {
+  $('#r-seance').value = String(S.seance); $('#r-liste').value = S.liste;
+  show('reglages'); setBack(home);
+  setMain('Enregistrer', () => {
+    S.seance = Number($('#r-seance').value); S.liste = $('#r-liste').value; S.fini = false; S.regle = true;
+    save(); toast(`Séance ${S.seance}, liste ${S.liste}.`); home();
+  });
+}
+twoTaps($('#r-clear'), 'Tout effacer', () => { S = vide(); save(); toast('Tout est effacé.'); reglages(); });
+
+// ---------- Démarrage : au premier usage, on dit où elle en est ----------
+if (!S.regle) reglages(); else home();
+</script>
+</body>
+</html>
